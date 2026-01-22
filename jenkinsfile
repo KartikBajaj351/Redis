@@ -1,44 +1,104 @@
-pipeline {
-    agent any
-    environment {
-        ANSIBLE_FORCE_COLOR = 'true'
-        ANSIBLE_HOST_KEY_CHECKING = 'False'
-    }
-    stages {
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
+def call(Map config = [:]) {
+
+    pipeline {
+        agent any
+
+        environment {
+            ANSIBLE_FORCE_COLOR = 'true'
+            ANSIBLE_HOST_KEY_CHECKING = 'False'
+            EMAIL_TO = 'bajajkartik.2025@gmail.com'
+            SLACK_CHANNEL = '#pipelineplumbers'
         }
-        stage('Verify Project') {
-            steps {
-                dir('prod') {
-                    sh '''
-                    pwd
-                    ls -l
-                    '''
+
+        stages {
+
+            stage('Checkout Code') {
+                steps {
+                    checkout scm
+                }
+            }
+
+            stage('Verify Project') {
+                steps {
+                    dir(config.workDir ?: 'prod') {
+                        sh '''
+                        pwd
+                        ls -l
+                        '''
+                    }
+                }
+            }
+
+            stage('Ansible Syntax Check') {
+                steps {
+                    dir(config.workDir ?: 'prod') {
+                        sh """
+                        ansible-playbook ${config.playbook ?: 'redis.yml'} \
+                          -i ${config.inventory ?: 'inventory'} \
+                          --syntax-check
+                        """
+                    }
+                }
+            }
+
+            stage('Run Ansible Playbook') {
+                steps {
+                    dir(config.workDir ?: 'prod') {
+                        sh """
+                        ansible-playbook ${config.playbook ?: 'redis.yml'} \
+                          -i ${config.inventory ?: 'inventory'}
+                        """
+                    }
                 }
             }
         }
-        stage('Ansible Syntax Check') {
-            steps {
-                dir('prod') {
-                    sh '''
-                    ansible-playbook redis.yml \
-                      -i inventory \
-                      --syntax-check
-                    '''
+
+        post {
+
+            success {
+                script {
+                    slackSend(
+                        channel: env.SLACK_CHANNEL,
+                        color: 'good',
+                        message: "✅ SUCCESS: Job *${env.JOB_NAME}* #${env.BUILD_NUMBER}\n${env.BUILD_URL}"
+                    )
+
+                    emailext(
+                        to: env.EMAIL_TO,
+                        subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                        Job: ${env.JOB_NAME}
+                        Build: ${env.BUILD_NUMBER}
+                        Status: SUCCESS
+                        URL: ${env.BUILD_URL}
+                        """
+                    )
                 }
             }
-        }
-        stage('Run Ansible Playbook') {
-            steps {
-                dir('prod') {
-                    sh '''
-                    ansible-playbook redis.yml \
-                      -i inventory
-                    '''
+
+            failure {
+                script {
+                    slackSend(
+                        channel: env.SLACK_CHANNEL,
+                        color: 'danger',
+                        message: "❌ FAILED: Job *${env.JOB_NAME}* #${env.BUILD_NUMBER}\n${env.BUILD_URL}"
+                    )
+
+                    emailext(
+                        to: env.EMAIL_TO,
+                        subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                        Job: ${env.JOB_NAME}
+                        Build: ${env.BUILD_NUMBER}
+                        Status: FAILED
+                        URL: ${env.BUILD_URL}
+                        """
+                    )
                 }
+            }
+
+            always {
+                cleanWs()
             }
         }
     }
