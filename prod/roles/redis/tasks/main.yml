@@ -1,0 +1,27 @@
+- name: Install Redis on Debian/Ubuntu (no apt cache update)
+  apt:
+    name: redis-server
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Ensure Redis service is enabled and started
+  service:
+    name: "{{ redis_service_name }}"
+    state: started
+    enabled: yes
+
+- name: Restart Redis using handler trigger
+  debug:
+    msg: "Triggering Redis restart"
+  notify: restart redis
+
+- name: Flush handlers now (so restart happens here)
+  meta: flush_handlers
+
+- name: Redis ping proof
+  command: redis-cli -p {{ redis_port }} ping
+  register: redis_ping
+
+- name: Show Redis ping output
+  debug:
+    var: redis_ping.stdout
