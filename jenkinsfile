@@ -70,7 +70,7 @@ pipeline {
                 emailext(
                     subject: "${jobName} - Build #${buildNumber} - ${pipelineStatus}",
                     body: body,
-                    to: bajajkartik.2025@gmail.com.',
+                    to: bajajkartik.2025@gmail.com',
                     mimeType: 'text/html'
                 )
                 /* SLACK */
