@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+    environment {
+        ANSIBLE_FORCE_COLOR = 'true'
+        ANSIBLE_HOST_KEY_CHECKING = 'False'
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Verify Project') {
+            steps {
+                dir('prod') {
+                    sh '''
+                    pwd
+                    ls -l
+                    '''
+                }
+            }
+        }
+        stage('Ansible Syntax Check') {
+            steps {
+                dir('prod') {
+                    sh '''
+                    ansible-playbook redis.yml \
+                      -i inventory \
+                      --syntax-check
+                    '''
+                }
+            }
+        }
+        stage('Run Ansible Playbook') {
+            steps {
+                dir('prod') {
+                    sh '''
+                    ansible-playbook redis.yml \
+                      -i inventory
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                def jobName = env.JOB_NAME
+                def buildNumber = env.BUILD_NUMBER
+                def pipelineStatus = currentBuild.result ?: 'SUCCESS'
+                def bannerColor = pipelineStatus == 'SUCCESS' ? 'green' : 'red'
+                def slackColor  = pipelineStatus == 'SUCCESS' ? 'good'  : 'danger'
+                def emoji       = pipelineStatus == 'SUCCESS' ? ':white_check_mark:' : ':x:'
+                /* EMAIL */
+                def body = """<html>
+                    <body>
+                        <div style="border:4px solid ${bannerColor}; padding:10px;">
+                            <h2>${jobName} - Build #${buildNumber}</h2>
+                            <div style="background-color:${bannerColor}; padding:10px;">
+                                <h3 style="color:white;">
+                                    Pipeline Status: ${pipelineStatus}
+                                </h3>
+                            </div>
+                            <p>
+                                :link: <a href="${BUILD_URL}">View Console Output</a>
+                            </p>
+                        </div>
+                    </body>
+                </html>"""
+                emailext(
+                    subject: "${jobName} - Build #${buildNumber} - ${pipelineStatus}",
+                    body: body,
+                    to: bajajkartik.2025@gmail.com.',
+                    mimeType: 'text/html'
+                )
+                /* SLACK */
+                slackSend(
+                    channel: '#pipelineplumbers',
+                    color: slackColor,
+                    message: """
+${emoji} *Jenkins Pipeline Notification*
+*Job:* ${jobName}
+*Build:* #${buildNumber}
+*Status:* *${pipelineStatus}*
+:link: <${BUILD_URL}|View Console Output>
+"""
+                )
+            }
+        }
+    }
+}
